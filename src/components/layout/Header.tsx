@@ -10,6 +10,7 @@ const navLinks = [
   { href: '/', label: 'Home' },
   { href: '/business', label: 'For Business' },
   { href: '/dashboard', label: 'Dashboard' },
+  { href: '/dashboard/business', label: 'Business Dashboard' },
   { href: '/admin', label: 'Admin' },
 ];
 
