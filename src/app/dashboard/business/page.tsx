@@ -1,8 +1,9 @@
+'use client';
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { MoreHorizontal, Download, QrCode } from "lucide-react"
-import { PRODUCTS_DB } from "@/lib/data"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,13 +13,21 @@ import {
 } from "@/components/ui/dropdown-menu"
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
-import { SafetyScoreDisplay } from "@/components/SafetyScoreDisplay"
 
-const businessProducts = PRODUCTS_DB.slice(0, 2).map(p => ({
-    ...p,
-    scans: Math.floor(Math.random() * 500),
-    safetyScore: Math.floor(Math.random() * 100),
-}));
+const businessProducts = [
+    {
+        id: '987654321',
+        name: 'Natural Care Body Butter',
+        scans: Math.floor(Math.random() * 500),
+        safetyScore: 98,
+    },
+    {
+        id: '556677889',
+        name: 'Baby Powder',
+        scans: Math.floor(Math.random() * 200),
+        safetyScore: 45,
+    }
+];
 
 export default function BusinessDashboardPage() {
   const getBadgeClass = (score: number) => {

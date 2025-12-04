@@ -10,19 +10,55 @@ const navLinks = [
   { href: '/', label: 'Home' },
   { href: '/business', label: 'For Business' },
   { href: '/dashboard', label: 'Dashboard' },
-  { href: '/dashboard/business', label: 'Business Dashboard' },
-  { href: '/admin', label: 'Admin' },
 ];
+
+const userNavLinks = [
+    { href: '/dashboard', label: 'Dashboard' },
+    { href: '/dashboard/favorites', label: 'Favorites' },
+    { href: '/dashboard/settings', label: 'Settings' },
+];
+
+const businessNavLinks = [
+    { href: '/dashboard/business', label: 'Business Dashboard' },
+    { href: '/dashboard/business/products', label: 'Manage Products' },
+];
+
+const adminNavLinks = [
+    { href: '/admin', label: 'Admin Dashboard' },
+]
+
 
 export function Header() {
   const [isOpen, setIsOpen] = useState(false);
+  // This is a placeholder. In a real app, you'd get this from an auth context.
+  const userRole = 'user'; // יכול להיות 'user', 'business', 'admin', or null
+
+  const getNavLinks = () => {
+      // This is a placeholder for a real auth check
+      const isLoggedIn = true; 
+      if (!isLoggedIn) {
+          return [
+            { href: '/', label: 'Home' },
+            { href: '/business', label: 'For Business' },
+          ];
+      }
+      switch(userRole) {
+          case 'user': return userNavLinks;
+          case 'business': return businessNavLinks;
+          case 'admin': return adminNavLinks;
+          default: return navLinks;
+      }
+  }
+  
+  const currentNavLinks = getNavLinks();
+
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-16 items-center justify-between">
         <Logo />
         <nav className="hidden md:flex items-center gap-6 text-sm font-medium">
-          {navLinks.map(({ href, label }) => (
+          {currentNavLinks.map(({ href, label }) => (
             <Link
               key={href}
               href={href}
@@ -51,7 +87,7 @@ export function Header() {
         <div className="md:hidden" onClick={() => setIsOpen(false)}>
           <div className="container py-4 flex flex-col gap-4">
             <nav className="flex flex-col gap-4 text-lg font-medium">
-                {navLinks.map(({ href, label }) => (
+                {currentNavLinks.map(({ href, label }) => (
                 <Link
                   key={href}
                   href={href}
