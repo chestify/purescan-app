@@ -13,23 +13,40 @@ import {
 } from "@/components/ui/dropdown-menu"
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
+import { useEffect, useState } from "react";
 
-const businessProducts = [
+type BusinessProduct = {
+    id: string;
+    name: string;
+    scans: number;
+    safetyScore: number;
+};
+
+const initialBusinessProducts = [
     {
         id: '987654321',
         name: 'Natural Care Body Butter',
-        scans: Math.floor(Math.random() * 500),
+        scans: 0,
         safetyScore: 98,
     },
     {
         id: '556677889',
         name: 'Baby Powder',
-        scans: Math.floor(Math.random() * 200),
+        scans: 0,
         safetyScore: 45,
     }
 ];
 
 export default function BusinessDashboardPage() {
+  const [businessProducts, setBusinessProducts] = useState<BusinessProduct[]>(initialBusinessProducts);
+
+  useEffect(() => {
+    setBusinessProducts(initialBusinessProducts.map(p => ({
+        ...p,
+        scans: Math.floor(Math.random() * (p.id === '987654321' ? 500 : 200))
+    })))
+  }, [])
+
   const getBadgeClass = (score: number) => {
     if (score > 80) return 'bg-chart-2/10 text-chart-2 border-chart-2/20 hover:bg-chart-2/20';
     if (score > 50) return 'bg-chart-4/10 text-chart-4 border-chart-4/20 hover:bg-chart-4/20';
