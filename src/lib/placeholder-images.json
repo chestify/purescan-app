@@ -1,3 +1,34 @@
 {
-  "placeholderImages": []
+  "placeholderImages": [
+    {
+      "id": "hero-image",
+      "description": "A vibrant image representing a healthy and clean lifestyle.",
+      "imageUrl": "https://images.unsplash.com/photo-1624948465027-6f9b51067557?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw5fHxoZWFsdGh5JTIwbGlmZXN0eWxlfGVufDB8fHx8MTc2NDc1NzMzMnww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "healthy lifestyle"
+    },
+    {
+      "id": "product-1",
+      "description": "A generic lotion bottle.",
+      "imageUrl": "https://images.unsplash.com/photo-1703633583217-d75c01447aff?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw3fHxsb3Rpb24lMjBib3R0bGV8ZW58MHx8fHwxNzY0ODIxNDE5fDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "lotion bottle"
+    },
+    {
+      "id": "product-2",
+      "description": "A jar of body butter.",
+      "imageUrl": "https://images.unsplash.com/photo-1764752855204-cc3a93a37454?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw5fHxib2R5JTIwYnV0dGVyfGVufDB8fHx8MTc2NDgzNDYzMnww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "body butter"
+    },
+    {
+      "id": "product-3",
+      "description": "A bottle of shower gel.",
+      "imageUrl": "https://images.unsplash.com/photo-1673847401561-fcd75a7888c5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw3fHxzaG93ZXIlMjBnZWx8ZW58MHx8fHwxNzY0ODU3MzQ4fDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "shower gel"
+    },
+    {
+      "id": "product-4",
+      "description": "A container of baby powder.",
+      "imageUrl": "https://images.unsplash.com/photo-1764226801347-caa55b91c449?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwyfHxiYWJ5JTIwcG93ZGVyfGVufDB8fHx8MTc2NDg1NzM0OHww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "baby powder"
+    }
+  ]
 }
