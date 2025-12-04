@@ -7,14 +7,15 @@ import { Badge } from '@/components/ui/badge';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { SafetyScoreDisplay } from '@/components/SafetyScoreDisplay';
 import { SaferAlternatives } from '@/components/SaferAlternatives';
+import { ProductDescription } from '@/components/ProductDescription';
 import type { Product } from '@/lib/data';
 
-type SafetyInfo = {
+export type SafetyInfo = {
   score: number;
   label: 'Green' | 'Yellow' | 'Red';
 };
 
-function calculateSafetyScore(product: Product): { score: number; riskyIngredients: Ingredient[] } {
+export function calculateSafetyScore(product: Product): { score: number; riskyIngredients: Ingredient[] } {
   let score = 100;
   const riskyIngredients: Ingredient[] = [];
 
@@ -29,7 +30,7 @@ function calculateSafetyScore(product: Product): { score: number; riskyIngredien
   return { score: Math.max(0, score), riskyIngredients };
 }
 
-function getSafetyInfo(score: number): SafetyInfo {
+export function getSafetyInfo(score: number): SafetyInfo {
   if (score > 80) {
     return { score, label: 'Green' };
   }
@@ -71,6 +72,8 @@ export default function ProductPage({ params }: { params: { barcode: string } })
               </div>
             </CardContent>
           </Card>
+          
+          <ProductDescription product={product} safetyInfo={safetyInfo} />
           
           {(safetyInfo.label === 'Yellow' || safetyInfo.label === 'Red') && (
             <SaferAlternatives productLabel={safetyInfo.label} />

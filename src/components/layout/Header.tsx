@@ -3,13 +3,25 @@
 import { useState } from 'react';
 import { Menu, X } from 'lucide-react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { Logo } from '@/components/Logo';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { User } from 'lucide-react';
+
 
 const navLinks = [
-  { href: '/', label: 'Home' },
   { href: '/business', label: 'For Business' },
-  { href: '/dashboard', label: 'Dashboard' },
+  { href: '/dashboard/subscription', label: 'Pricing' },
 ];
 
 const userNavLinks = [
@@ -19,29 +31,28 @@ const userNavLinks = [
 ];
 
 const businessNavLinks = [
-    { href: '/dashboard/business', label: 'Business Dashboard' },
+    { href: '/dashboard/business', label: 'Dashboard' },
     { href: '/dashboard/business/products', label: 'Manage Products' },
 ];
 
 const adminNavLinks = [
-    { href: '/admin', label: 'Admin Dashboard' },
+    { href: '/admin', label: 'Admin Panel' },
 ]
 
 
 export function Header() {
   const [isOpen, setIsOpen] = useState(false);
+  const pathname = usePathname();
+  
   // This is a placeholder. In a real app, you'd get this from an auth context.
-  const userRole = 'user'; // יכול להיות 'user', 'business', 'admin', or null
+  const userRole = pathname.startsWith('/admin') ? 'admin' 
+                    : pathname.startsWith('/dashboard/business') ? 'business' 
+                    : pathname.startsWith('/dashboard') ? 'user' 
+                    : null;
+    
+  const isLoggedIn = !!userRole;
 
   const getNavLinks = () => {
-      // This is a placeholder for a real auth check
-      const isLoggedIn = true; 
-      if (!isLoggedIn) {
-          return [
-            { href: '/', label: 'Home' },
-            { href: '/business', label: 'For Business' },
-          ];
-      }
       switch(userRole) {
           case 'user': return userNavLinks;
           case 'business': return businessNavLinks;
@@ -62,19 +73,43 @@ export function Header() {
             <Link
               key={href}
               href={href}
-              className="transition-colors hover:text-primary"
+              className={cn("transition-colors hover:text-primary", pathname === href ? "text-primary font-semibold" : "")}
             >
               {label}
             </Link>
           ))}
         </nav>
         <div className="hidden md:flex items-center gap-2">
-           <Button variant="ghost" asChild>
-            <Link href="/auth/sign-in">Sign In</Link>
-          </Button>
-          <Button asChild>
-            <Link href="/auth/sign-up">Sign Up</Link>
-          </Button>
+            {isLoggedIn ? (
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="secondary" size="icon" className="rounded-full">
+                            <Avatar>
+                                <AvatarFallback>
+                                    <User />
+                                </AvatarFallback>
+                            </Avatar>
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                        <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem asChild><Link href="/dashboard/settings">Settings</Link></DropdownMenuItem>
+                        <DropdownMenuItem asChild><Link href="/dashboard/subscription">Subscription</Link></DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem asChild><Link href="/">Sign Out</Link></DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            ) : (
+                <>
+                    <Button variant="ghost" asChild>
+                        <Link href="/auth/sign-in">Sign In</Link>
+                    </Button>
+                    <Button asChild>
+                        <Link href="/auth/sign-up">Sign Up</Link>
+                    </Button>
+                </>
+            )}
         </div>
         <div className="md:hidden">
           <Button variant="ghost" size="icon" onClick={() => setIsOpen(!isOpen)}>
@@ -91,19 +126,27 @@ export function Header() {
                 <Link
                   key={href}
                   href={href}
-                  className="transition-colors hover:text-primary"
+                  className={cn("transition-colors hover:text-primary", pathname === href ? "text-primary font-semibold" : "")}
                 >
                   {label}
                 </Link>
               ))}
             </nav>
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" asChild className="flex-1">
-                <Link href="/auth/sign-in">Sign In</Link>
-              </Button>
-              <Button asChild className="flex-1">
-                <Link href="/auth/sign-up">Sign Up</Link>
-              </Button>
+            <div className="flex items-center gap-2 pt-4 border-t">
+              {isLoggedIn ? (
+                 <Button asChild className="flex-1">
+                    <Link href="/">Sign Out</Link>
+                  </Button>
+              ) : (
+                <>
+                <Button variant="ghost" asChild className="flex-1">
+                    <Link href="/auth/sign-in">Sign In</Link>
+                </Button>
+                <Button asChild className="flex-1">
+                    <Link href="/auth/sign-up">Sign Up</Link>
+                </Button>
+                </>
+              )}
             </div>
           </div>
         </div>

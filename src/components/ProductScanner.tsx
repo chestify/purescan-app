@@ -3,8 +3,8 @@
 import { useRouter } from 'next/navigation';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { ScanLine } from 'lucide-react';
-import { FormEvent, useState, useRef, useEffect } from 'react';
+import { ScanLine, Loader2 } from 'lucide-react';
+import { FormEvent, useState, useRef, useEffect, useTransition } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import {
   Dialog,
@@ -15,6 +15,20 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { getProductById } from '@/lib/data';
+
+// In a real app, this would use a proper barcode scanning library
+const fakeScan = (videoElement: HTMLVideoElement) => {
+    return new Promise<string>((resolve) => {
+      setTimeout(() => {
+        // Simulate scanning one of the products from our DB
+        const productIds = ['123456789', '987654321', '112233445', '556677889'];
+        const randomId = productIds[Math.floor(Math.random() * productIds.length)];
+        resolve(randomId);
+      }, 2000); // Simulate a 2-second scan
+    });
+};
+
 
 export function ProductScanner() {
   const router = useRouter();
@@ -23,10 +37,29 @@ export function ProductScanner() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
+  const [isScanning, startScanTransition] = useTransition();
+
+  const handleNavigation = (barcode: string) => {
+    const product = getProductById(barcode.trim());
+    if (!product) {
+      toast({
+        title: 'Product Not Found',
+        description: "We couldn't find a product with that barcode in our database.",
+        variant: 'destructive',
+      });
+      return;
+    }
+    router.push(`/product/${barcode.trim()}`);
+  }
 
   useEffect(() => {
     if (isDialogOpen) {
+      setHasCameraPermission(null);
       const getCameraPermission = async () => {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            setHasCameraPermission(false);
+            return;
+        }
         try {
           const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
           setHasCameraPermission(true);
@@ -55,6 +88,21 @@ export function ProductScanner() {
     }
   }, [isDialogOpen, toast]);
 
+  useEffect(() => {
+    if (hasCameraPermission && videoRef.current) {
+        startScanTransition(async () => {
+            const scannedBarcode = await fakeScan(videoRef.current!);
+            toast({
+                title: "Scan Successful",
+                description: `Found product with barcode: ${scannedBarcode}`,
+            });
+            handleNavigation(scannedBarcode);
+            setIsDialogOpen(false);
+        });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasCameraPermission]);
+
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!barcode.trim()) {
@@ -65,7 +113,7 @@ export function ProductScanner() {
       });
       return;
     }
-    router.push(`/product/${barcode}`);
+    handleNavigation(barcode);
   };
 
   return (
@@ -80,12 +128,12 @@ export function ProductScanner() {
           className="flex-grow"
         />
         <Button type="submit">
-          Scan
+          Search
         </Button>
       </form>
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogTrigger asChild>
-          <Button variant="outline">
+          <Button variant="outline" aria-label="Scan barcode">
             <ScanLine className="h-4 w-4" />
           </Button>
         </DialogTrigger>
@@ -94,18 +142,23 @@ export function ProductScanner() {
             <DialogTitle>Scan Barcode</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-4">
-            <div className='relative'>
-              <video ref={videoRef} className="w-full aspect-video rounded-md bg-muted" autoPlay muted playsInline />
+            <div className='relative flex items-center justify-center bg-muted rounded-md aspect-video'>
+              <video ref={videoRef} className="w-full h-full object-cover rounded-md" autoPlay muted playsInline />
+
+              {isScanning && (
+                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50">
+                    <Loader2 className="h-8 w-8 animate-spin text-white" />
+                    <p className="text-white mt-2">Scanning...</p>
+                 </div> 
+              )}
 
               {hasCameraPermission === false && (
-                <div className="absolute inset-0 flex items-center justify-center">
                   <Alert variant="destructive" className="w-auto">
                     <AlertTitle>Camera Access Required</AlertTitle>
                     <AlertDescription>
-                      Please allow camera access to use this feature.
+                      Please allow camera access.
                     </AlertDescription>
                   </Alert>
-                </div>
               )}
             </div>
 
