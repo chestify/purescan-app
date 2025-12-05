@@ -2,15 +2,28 @@ import { collection, getDocs, query, where, doc, getDoc } from "firebase/firesto
 import { db } from "./firebase"
 
 // Get product by barcode
+// Get product by barcode
 export async function getProductByBarcode(barcode: string) {
+
+  // TEMP TEST: Check if app is reading ANY products at all
+  const testSnapshot = await getDocs(collection(db, "products"))
+  console.log("PRODUCT COUNT IN DB:", testSnapshot.size)
+
+  // Normal query
   const q = query(collection(db, "products"), where("barcode", "==", barcode))
   const snapshot = await getDocs(q)
 
-  if (snapshot.empty) return null
+  if (snapshot.empty) {
+    console.log("NO MATCH FOR BARCODE:", barcode)
+    return null
+  }
 
   const productDoc = snapshot.docs[0]
+  console.log("FOUND PRODUCT:", productDoc.data())
+
   return { id: productDoc.id, ...productDoc.data() }
 }
+
 
 // Get product ingredients
 export async function getIngredientsByProductId(productId: string) {

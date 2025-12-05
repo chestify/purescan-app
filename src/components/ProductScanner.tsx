@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useRouter } from 'next/navigation';
@@ -15,16 +16,13 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { getProductById } from '@/lib/data';
+import { getProductById, PRODUCTS_DB } from '@/lib/data';
 
 // In a real app, this would use a proper barcode scanning library
-const fakeScan = (videoElement: HTMLVideoElement) => {
+const fakeScan = (videoElement: HTMLVideoElement, barcode: string) => {
     return new Promise<string>((resolve) => {
       setTimeout(() => {
-        // Simulate scanning one of the products from our DB
-        const productIds = ['123456789', '987654321', '112233445', '556677889'];
-        const randomId = productIds[Math.floor(Math.random() * productIds.length)];
-        resolve(randomId);
+        resolve(barcode);
       }, 2000); // Simulate a 2-second scan
     });
 };
@@ -38,6 +36,14 @@ export function ProductScanner() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
   const [isScanning, startScanTransition] = useTransition();
+  const [scannedBarcode, setScannedBarcode] = useState<string>('');
+
+  useEffect(() => {
+    // Select a random product barcode only on the client-side to avoid hydration errors.
+    const productIds = PRODUCTS_DB.map(p => p.id);
+    const randomId = productIds[Math.floor(Math.random() * productIds.length)];
+    setScannedBarcode(randomId);
+  }, []);
 
   const handleNavigation = (barcode: string) => {
     const product = getProductById(barcode.trim());
@@ -89,19 +95,19 @@ export function ProductScanner() {
   }, [isDialogOpen, toast]);
 
   useEffect(() => {
-    if (hasCameraPermission && videoRef.current) {
+    if (hasCameraPermission && videoRef.current && scannedBarcode) {
         startScanTransition(async () => {
-            const scannedBarcode = await fakeScan(videoRef.current!);
+            const resultBarcode = await fakeScan(videoRef.current!, scannedBarcode);
             toast({
                 title: "Scan Successful",
-                description: `Found product with barcode: ${scannedBarcode}`,
+                description: `Found product with barcode: ${resultBarcode}`,
             });
-            handleNavigation(scannedBarcode);
+            handleNavigation(resultBarcode);
             setIsDialogOpen(false);
         });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasCameraPermission]);
+  }, [hasCameraPermission, scannedBarcode]);
 
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
