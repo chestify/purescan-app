@@ -8,7 +8,8 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { SafetyScoreDisplay } from '@/components/SafetyScoreDisplay';
 import { SaferAlternatives } from '@/components/SaferAlternatives';
 import { ProductDescription } from '@/components/ProductDescription';
-import type { Product } from '@/lib/data';
+
+
 
 export type SafetyInfo = {
   score: number;
