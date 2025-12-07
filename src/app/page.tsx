@@ -1,8 +1,12 @@
+"use client";
+
 import Image from 'next/image';
-import { ProductScanner } from '@/components/ProductScanner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CheckCircle, Shield, Truck } from 'lucide-react';
 import placeholderImages from '@/lib/placeholder-images.json';
+import BarcodeScanner from "@/components/BarcodeScanner";
+import { useRouter } from "next/navigation";
+
 
 const features = [
   {
@@ -23,6 +27,12 @@ const features = [
 ]
 
 export default function Home() {
+  const router = useRouter();
+
+  function handleDetected(barcode: string) {
+    console.log("Detected barcode:", barcode);
+    router.push(`/product/${barcode}`);
+  }
   const heroImage = placeholderImages.placeholderImages.find(p => p.id === "hero-image");
 
   return (
@@ -39,7 +49,16 @@ export default function Home() {
                   PureScan helps you understand product ingredients, so you can make safer choices for you and your family.
                 </p>
               </div>
-              <ProductScanner />
+              <section className="mt-6">
+  <h2 className="text-2xl font-bold mb-4">Scan a Product</h2>
+
+  <BarcodeScanner onDetected={handleDetected} />
+
+  <p className="text-center mt-2 text-sm text-muted-foreground">
+    Point your camera at a barcode to begin.
+  </p>
+</section>
+
             </div>
             <div className="mx-auto aspect-[3/2] overflow-hidden rounded-xl lg:order-last">
               <Image
