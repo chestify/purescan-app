@@ -128,11 +128,11 @@ export default async function ProductPage({
             </CardContent>
           </Card>
 
-          <ProductDescription product={product} safetyInfo={safetyInfo} />
+          <ProductDescription ingredients={ingredients} safetyInfo={safetyInfo} />
 
           {(safetyInfo.label === "Yellow" ||
             safetyInfo.label === "Red") && (
-            <SaferAlternatives productLabel={safetyInfo.label} />
+            <SaferAlternatives productLabel={safetyInfo.label as 'Yellow' | 'Red'} />
           )}
         </div>
 
@@ -145,7 +145,7 @@ export default async function ProductPage({
             <CardContent>
               <SafetyScoreDisplay
                 score={safetyInfo.score}
-                label={safetyInfo.label}
+                label={safetyInfo.label as 'Green' | 'Yellow' | 'Red'}
               />
             </CardContent>
           </Card>

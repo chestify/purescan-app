@@ -6,17 +6,20 @@ import { Loader2, Sparkles, FileText } from 'lucide-react';
 import { generateProductDescription } from '@/ai/flows/generate-product-description';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import type { Product } from '@/lib/data';
-import type { SafetyInfo } from '@/app/product/[barcode]/page';
+import type { Ingredient } from '@/lib/data';
 import { Skeleton } from '@/components/ui/skeleton';
 
+type SafetyInfo = {
+    score: number;
+    label: string;
+};
 
 type Props = {
-  product: Product;
+  ingredients: Ingredient[];
   safetyInfo: SafetyInfo;
 };
 
-export function ProductDescription({ product, safetyInfo }: Props) {
+export function ProductDescription({ ingredients, safetyInfo }: Props) {
   const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
   const [description, setDescription] = useState<string | null>(null);
@@ -24,8 +27,9 @@ export function ProductDescription({ product, safetyInfo }: Props) {
   useEffect(() => {
     startTransition(async () => {
       try {
+        const ingredientNames = ingredients.map(ing => ing.name).join(', ');
         const result = await generateProductDescription({
-          ingredients: product.ingredients.join(', '),
+          ingredients: ingredientNames,
           safetyScore: safetyInfo.score,
           productLabel: safetyInfo.label,
         });
@@ -45,7 +49,7 @@ export function ProductDescription({ product, safetyInfo }: Props) {
       }
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [product.id]);
+  }, [ingredients, safetyInfo]);
 
   return (
     <Card>

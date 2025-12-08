@@ -87,7 +87,6 @@ exports.lookupProduct = onRequest(async (req, res) => {
   }
 
   try {
-    // 1. Look for existing product by barcode
     const snap = await db
       .collection("products")
       .where("barcode", "==", barcode)
@@ -104,8 +103,7 @@ exports.lookupProduct = onRequest(async (req, res) => {
       return;
     }
 
-    // 2. If not found, create placeholder product
-    const newProductRef = db.collection("products").doc(String(barcode));
+    const newProductRef = db.collection("products").doc(barcode);
     const newProductData = {
       barcode,
       name: "New product",
