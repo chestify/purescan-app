@@ -26,7 +26,7 @@ export default function BarcodeScanner({
     };
 
     async function startScanner() {
-      if (!("BarcodeDetector" in window)) {
+      if (typeof window === 'undefined' || !("BarcodeDetector" in window)) {
         setError("Barcode Detector API is not supported by this browser.");
         setHasCameraPermission(false);
         return;
@@ -49,7 +49,7 @@ export default function BarcodeScanner({
         });
 
         const scanLoop = async () => {
-          if (!videoRef.current || videoRef.current.paused) {
+          if (!videoRef.current || videoRef.current.paused || videoRef.current.readyState < 2) {
             animationFrameId = requestAnimationFrame(scanLoop);
             return;
           }
@@ -58,8 +58,8 @@ export default function BarcodeScanner({
             const barcodes = await detector.detect(videoRef.current);
             if (barcodes.length > 0) {
               const value = barcodes[0].rawValue;
-              onDetected(value);
               stopStream(); // Stop the camera once detected
+              onDetected(value); // Pass the correct barcode
               return; // End the loop
             }
           } catch (e) {
@@ -94,21 +94,26 @@ export default function BarcodeScanner({
 
   return (
     <div className="flex flex-col items-center gap-4">
-      {hasCameraPermission === false && (
-         <Alert variant="destructive">
-            <AlertTitle>Camera Access Required</AlertTitle>
-            <AlertDescription>
-                {error || "Please allow camera access to use this feature."}
-            </AlertDescription>
-         </Alert>
-      )}
-
-      <video
-        ref={videoRef}
-        className="rounded-lg border w-full max-w-sm"
-        style={{ transform: "scaleX(-1)", display: hasCameraPermission ? 'block' : 'none' }}
-        playsInline
-      />
+      <div className="relative w-full max-w-sm">
+        <video
+          ref={videoRef}
+          className="rounded-lg border w-full aspect-video"
+          style={{ transform: "scaleX(-1)", display: hasCameraPermission === null || hasCameraPermission ? 'block' : 'none' }}
+          playsInline
+          muted
+          autoPlay
+        />
+        {hasCameraPermission === false && (
+           <div className="absolute inset-0 flex items-center justify-center bg-muted rounded-lg">
+             <Alert variant="destructive" className="w-auto">
+                <AlertTitle>Camera Access Required</AlertTitle>
+                <AlertDescription>
+                    {error || "Please allow camera access."}
+                </AlertDescription>
+             </Alert>
+           </div>
+        )}
+      </div>
     </div>
   );
 }
