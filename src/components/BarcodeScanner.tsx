@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Quagga from "@ericblade/quagga2";
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
@@ -16,95 +17,88 @@ export default function BarcodeScanner({
   const { toast } = useToast();
 
   useEffect(() => {
-    let stream: MediaStream | null = null;
-    let animationFrameId: number;
+    let quaggaInitialized = false;
 
-    const stopStream = () => {
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
+    const startScanner = () => {
+      if (videoRef.current && !quaggaInitialized) {
+        quaggaInitialized = true;
+        Quagga.init(
+          {
+            inputStream: {
+              name: "Live",
+              type: "LiveStream",
+              target: videoRef.current,
+              constraints: {
+                facingMode: "environment",
+              },
+            },
+            decoder: {
+              readers: ["ean_reader", "upc_reader", "code_128_reader"],
+            },
+            locate: true,
+          },
+          (err) => {
+            if (err) {
+              console.error("Quagga initialization failed:", err);
+              setError("Failed to initialize scanner. Please check camera permissions.");
+              setHasCameraPermission(false);
+              toast({
+                  variant: "destructive",
+                  title: "Scanner Error",
+                  description: "Could not initialize the barcode scanner.",
+              });
+              return;
+            }
+            setHasCameraPermission(true);
+            Quagga.start();
+          }
+        );
+
+        Quagga.onDetected((result) => {
+          onDetected(result.codeResult.code);
+        });
       }
     };
 
-    async function startScanner() {
-      if (typeof window === 'undefined' || !("BarcodeDetector" in window)) {
-        setError("Barcode Detector API is not supported by this browser.");
-        setHasCameraPermission(false);
-        return;
-      }
-
+    const getCameraPermission = async () => {
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "environment" },
-        });
-
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
         setHasCameraPermission(true);
-
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play();
-        }
-
-        const detector = new (window as any).BarcodeDetector({
-          formats: ["ean_13", "ean_8", "code_128", "upc_a", "upc_e"],
-        });
-
-        const scanLoop = async () => {
-          if (!videoRef.current || videoRef.current.paused || videoRef.current.readyState < 2) {
-            animationFrameId = requestAnimationFrame(scanLoop);
-            return;
-          }
-
-          try {
-            const barcodes = await detector.detect(videoRef.current);
-            if (barcodes.length > 0) {
-              const value = barcodes[0].rawValue;
-              stopStream(); // Stop the camera once detected
-              onDetected(value); // Pass the correct barcode
-              return; // End the loop
-            }
-          } catch (e) {
-            console.error("Barcode detection error:", e);
-            // Continue scanning even if one frame fails
-          }
-          animationFrameId = requestAnimationFrame(scanLoop);
-        };
-
-        scanLoop();
-
-      } catch (err) {
-        console.error("Camera access error:", err);
-        setError("Camera access denied or unavailable. Please check your browser permissions.");
+        stream.getTracks().forEach(track => track.stop()); // Stop the initial stream, Quagga will start its own
+        startScanner();
+      } catch (error) {
+        console.error('Error accessing camera:', error);
         setHasCameraPermission(false);
+        setError("Camera access was denied. Please enable it in your browser settings.");
         toast({
-            variant: "destructive",
-            title: "Camera Access Denied",
-            description: "Please enable camera permissions in your browser settings to use the scanner.",
-        })
+          variant: 'destructive',
+          title: 'Camera Access Denied',
+          description: 'Please enable camera permissions in your browser settings to use this app.',
+        });
       }
+    };
+
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      getCameraPermission();
+    } else {
+        setError("Your browser does not support camera access.");
+        setHasCameraPermission(false);
     }
 
-    startScanner();
 
-    // Cleanup function
     return () => {
-      cancelAnimationFrame(animationFrameId);
-      stopStream();
+      if (quaggaInitialized) {
+        Quagga.stop();
+      }
     };
   }, [onDetected, toast]);
 
   return (
     <div className="flex flex-col items-center gap-4">
-      <div className="relative w-full max-w-sm">
-        <video
-          ref={videoRef}
-          className="rounded-lg border w-full aspect-video"
-          style={{ transform: "scaleX(-1)", display: hasCameraPermission === null || hasCameraPermission ? 'block' : 'none' }}
-          playsInline
-          muted
-          autoPlay
-        />
+       <div className="relative w-full max-w-sm aspect-video bg-muted rounded-lg overflow-hidden">
+        <div ref={videoRef} id="interactive" className="viewport"/>
         {hasCameraPermission === false && (
-           <div className="absolute inset-0 flex items-center justify-center bg-muted rounded-lg">
+           <div className="absolute inset-0 flex items-center justify-center bg-muted">
              <Alert variant="destructive" className="w-auto">
                 <AlertTitle>Camera Access Required</AlertTitle>
                 <AlertDescription>
@@ -113,7 +107,7 @@ export default function BarcodeScanner({
              </Alert>
            </div>
         )}
-      </div>
+       </div>
     </div>
   );
 }

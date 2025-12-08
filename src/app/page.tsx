@@ -4,8 +4,9 @@ import Image from 'next/image';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CheckCircle, Shield, Truck } from 'lucide-react';
 import placeholderImages from '@/lib/placeholder-images.json';
-import BarcodeScanner from "@/components/BarcodeScanner";
 import { useRouter } from "next/navigation";
+import dynamic from 'next/dynamic';
+import { Skeleton } from '@/components/ui/skeleton';
 
 
 const features = [
@@ -25,6 +26,16 @@ const features = [
     description: 'Look for the PureScan seal to easily identify products verified by our clean standards.',
   },
 ]
+
+const BarcodeScanner = dynamic(() => import('@/components/BarcodeScanner'), { 
+  ssr: false,
+  loading: () => (
+    <div className="flex flex-col items-center gap-4">
+      <Skeleton className="w-full max-w-sm aspect-video rounded-lg" />
+    </div>
+  )
+});
+
 
 export default function Home() {
   const router = useRouter();
