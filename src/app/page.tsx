@@ -32,6 +32,7 @@ const BarcodeScanner = dynamic(() => import('@/components/BarcodeScanner'), {
   loading: () => (
     <div className="flex flex-col items-center gap-4">
       <Skeleton className="w-full max-w-sm aspect-video rounded-lg" />
+      <Skeleton className="h-4 w-32" />
     </div>
   )
 });
@@ -41,7 +42,7 @@ export default function Home() {
   const router = useRouter();
 
   function handleDetected(barcode: string) {
-    console.log("Detected barcode:", barcode);
+    console.log("Detected barcode, redirecting:", barcode);
     router.push(`/product/${barcode}`);
   }
   const heroImage = placeholderImages.placeholderImages.find(p => p.id === "hero-image");
@@ -61,14 +62,14 @@ export default function Home() {
                 </p>
               </div>
               <section className="mt-6">
-  <h2 className="text-2xl font-bold mb-4">Scan a Product</h2>
+                <h2 className="text-2xl font-bold mb-4">Scan a Product</h2>
 
-  <BarcodeScanner onDetected={handleDetected} />
+                <BarcodeScanner onDetected={handleDetected} />
 
-  <p className="text-center mt-2 text-sm text-muted-foreground">
-    Point your camera at a barcode to begin.
-  </p>
-</section>
+                <p className="text-center mt-2 text-sm text-muted-foreground">
+                    Point your camera at a barcode to begin.
+                </p>
+              </section>
 
             </div>
             <div className="mx-auto aspect-[3/2] overflow-hidden rounded-xl lg:order-last">
