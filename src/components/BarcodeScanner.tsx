@@ -153,9 +153,15 @@ export default function BarcodeScanner({
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
         videoRef.current.srcObject = stream;
         
-        const readers = supportQR
-          ? ["ean_reader", "ean_8_reader", "code_128_reader", "upc_reader", "qr_reader"]
-          : ["ean_reader", "ean_8_reader", "code_128_reader", "upc_reader"];
+        const readerConfigs = [
+          { format: "ean_reader", config: {} },
+          { format: "ean_8_reader", config: {} },
+          { format: "code_128_reader", config: {} },
+          { format: "upc_reader", config: {} },
+        ];
+        if (supportQR) {
+            readerConfigs.push({ format: 'qr_reader', config: {} });
+        }
 
         const handleDetected = (result: any) => {
           const code = result?.codeResult?.code;
@@ -171,7 +177,7 @@ export default function BarcodeScanner({
             target: videoRef.current,
             constraints: { facingMode: "environment" },
           },
-          decoder: { readers: readers },
+          decoder: { readers: readerConfigs as any },
           locator: { patchSize: "medium", halfSample: true },
           locate: true,
         }, (err) => {
@@ -314,6 +320,3 @@ export default function BarcodeScanner({
     </div>
   );
 }
-
-
-    
