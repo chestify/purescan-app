@@ -3,237 +3,274 @@
 import { useEffect, useRef, useState } from "react";
 import Quagga from "@ericblade/quagga2";
 import { useRouter } from "next/navigation";
-import { useToast } from "@/hooks/use-toast";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-
-// Extend the Window interface to include BarcodeDetector for TypeScript
-declare global {
-  interface Window {
-    BarcodeDetector: any;
-  }
-}
 
 const LOOKUP_URL =
   "https://us-central1-purescan-a61f4.cloudfunctions.net/lookupProduct";
 
-type ScanHistoryEntry = {
-  code: string;
-  status: "existing" | "new" | "error" | "unknown";
-  productId: string | null;
-  at: string;
-};
+/* -------------------------------------------------
+   NORMALIZE + VALIDATE EAN-13
+-------------------------------------------------- */
+function normalizeEAN13(raw: string): string | null {
+  if (!raw) return null;
+  let digits = raw.replace(/\D/g, "");
 
-const HISTORY_KEY = "purescan_scan_history";
-
-export default function BarcodeScanner({ onDetected }: { onDetected: (barcode: string) => void; }) {
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
-  
-  const videoRef = useRef<HTMLDivElement>(null);
-  const router = useRouter();
-  const { toast } = useToast();
-
-  const nativeSupported =
-    typeof window !== "undefined" && "BarcodeDetector" in window;
-
-  function isValidBarcode(code: string): boolean {
-    if (!code || !/^\d+$/.test(code)) return false;
-    
-    // EAN-13 and UPC-A validation
-    if (code.length === 13 || code.length === 12) {
-      const arr = code.split("").map(Number);
-      const checkDigit = arr.pop() as number;
-      
-      let sum = 0;
-      const start = code.length === 13 ? 0 : 1;
-      
-      for (let i = 0; i < arr.length; i++) {
-        sum += arr[i] * ((i + start) % 2 === 0 ? 1 : 3);
-      }
-      
-      const calculatedCheckDigit = (10 - (sum % 10)) % 10;
-      return checkDigit === calculatedCheckDigit;
-    }
-    return false; // Reject other lengths
+  // If 12 digits → add checksum
+  if (digits.length === 12) {
+    const sum = digits
+      .split("")
+      .reduce(
+        (acc, val, idx) => acc + Number(val) * (idx % 2 === 0 ? 1 : 3),
+        0
+      );
+    const checksum = (10 - (sum % 10)) % 10;
+    digits += checksum;
   }
 
-  async function handleBarcode(code: string) {
-    if (isLoading) return;
+  // If too long → trim
+  if (digits.length > 13) digits = digits.slice(0, 13);
 
-    setIsLoading(true);
-    navigator.vibrate?.(100);
+  return digits.length === 13 ? digits : null;
+}
+
+function isValidEAN13(code: string | null): boolean {
+  if (!code || !/^\d{13}$/.test(code)) return false;
+
+  const digits = code.split("").map(Number);
+  const checksum = digits.pop()!;
+  const sum = digits.reduce(
+    (acc, val, idx) => acc + val * (idx % 2 === 0 ? 1 : 3),
+    0
+  );
+  const expected = (10 - (sum % 10)) % 10;
+
+  return checksum === expected;
+}
+
+/* -------------------------------------------------
+   MAIN COMPONENT
+-------------------------------------------------- */
+export default function BarcodeScanner({
+  onDetected,
+}: {
+  onDetected?: (code: string) => void;
+}) {
+  const router = useRouter();
+  const videoRef = useRef<HTMLDivElement>(null);
+
+  const [scanned, setScanned] = useState<string | null>(null);
+  const [isSteady, setIsSteady] = useState(false);
+  const [manualInput, setManualInput] = useState("");
+  const [supportQR, setSupportQR] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(false);
+
+  /* ----------------------------------------------
+     CALL CLOUD FUNCTION + REDIRECT
+  ----------------------------------------------- */
+  async function handleBarcode(raw: string) {
+    const normalized = normalizeEAN13(raw);
+    console.log("Raw scan:", raw, "→ Normalized:", normalized);
+
+    setScanned(normalized ?? "Invalid scan");
+
+    if (!normalized || !isValidEAN13(normalized)) {
+      console.warn("Invalid barcode, ignoring.");
+      return;
+    }
+
+    setIsSteady(true);
 
     try {
-        const res = await fetch(`${LOOKUP_URL}?barcode=${code}`);
-        if (!res.ok) {
-            throw new Error(`Server responded with status ${res.status}`);
-        }
-        const data = await res.json();
+      const res = await fetch(
+        `${LOOKUP_URL}?barcode=${encodeURIComponent(normalized)}`
+      );
+      const data = await res.json();
 
-        if (data.error) {
-            throw new Error(data.error);
-        }
-
-        if (data.id) {
-            // Use the onDetected prop which is just router.push
-            onDetected(data.id);
-        } else {
-            throw new Error("Invalid response from lookup function.");
-        }
-    } catch (err: any) {
-        console.error("Lookup error:", err);
-        setError(`Error looking up barcode: ${err.message}`);
-        toast({
-            variant: "destructive",
-            title: "Lookup Failed",
-            description: err.message || "Could not find product information.",
-        });
-        setIsLoading(false); // Allow retrying
+      if (!data.error) {
+        router.push(`/product/${data.id}?status=${data.status}`);
+        onDetected?.(normalized);
+      } else {
+        console.error("lookupProduct error:", data.error);
+      }
+    } catch (e) {
+      console.error("Lookup failed:", e);
+    } finally {
+      setIsSteady(false);
+      setIsScanning(false); // turn camera off after a scan
+      try {
+        Quagga.stop();
+      } catch {}
     }
   }
 
+  /* ----------------------------------------------
+     START / STOP QUAGGA WHEN isScanning CHANGES
+  ----------------------------------------------- */
   useEffect(() => {
-    let stopScanning = () => {};
-
-    const startNativeScanner = async () => {
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: "environment" },
-            });
-            setHasCameraPermission(true);
-
-            const video = document.createElement("video");
-            video.srcObject = stream;
-            video.autoplay = true;
-            video.playsInline = true;
-            video.style.width = "100%";
-            video.style.height = "100%";
-            video.style.objectFit = "cover";
-            videoRef.current?.appendChild(video);
-            
-            await video.play();
-
-            const detector = new window.BarcodeDetector({
-                formats: ["ean_13", "upc_a"],
-            });
-
-            let scanning = true;
-            const scanLoop = async () => {
-                if (!scanning) return;
-                try {
-                    const barcodes = await detector.detect(video);
-                    if (barcodes.length > 0) {
-                        const code = barcodes[0].rawValue;
-                        if (isValidBarcode(code)) {
-                            scanning = false;
-                            stopScanning();
-                            handleBarcode(code);
-                            return;
-                        }
-                    }
-                } catch (e) {
-                    console.error("Native scan loop error", e);
-                }
-                if (scanning) requestAnimationFrame(scanLoop);
-            };
-            scanLoop();
-
-            stopScanning = () => {
-                scanning = false;
-                stream.getTracks().forEach((track) => track.stop());
-                if (videoRef.current) videoRef.current.innerHTML = "";
-            };
-
-        } catch (err) {
-            console.warn("Native scanner failed, falling back to Quagga.", err);
-            startQuaggaScanner();
-        }
-    };
-    
-    const startQuaggaScanner = () => {
-      if (!videoRef.current) return;
-
-      Quagga.init(
-        {
-          inputStream: {
-            name: "Live",
-            type: "LiveStream",
-            target: videoRef.current,
-            constraints: { facingMode: "environment" },
-          },
-          decoder: {
-            readers: ["ean_reader", "upc_reader"],
-          },
-          locate: true,
-        },
-        (err) => {
-          if (err) {
-            console.error("Quagga initialization failed:", err);
-            setError("Failed to initialize scanner. Please check camera permissions.");
-            setHasCameraPermission(false);
-            return;
-          }
-          setHasCameraPermission(true);
-          Quagga.start();
-        }
-      );
-      
-      const onDetectHandler = (result: any) => {
-        const code = result.codeResult.code;
-        if(isValidBarcode(code)){
-            Quagga.offDetected(onDetectHandler);
-            stopScanning();
-            handleBarcode(code);
-        }
-      }
-      Quagga.onDetected(onDetectHandler);
-
-      stopScanning = () => {
-        try {
-            Quagga.offDetected(onDetectHandler);
-            Quagga.stop();
-        } catch(e) {
-            console.log("Quagga stop error", e);
-        }
-      }
-    };
-
-
-    if (nativeSupported) {
-      startNativeScanner();
-    } else {
-      startQuaggaScanner();
+    if (!isScanning) {
+      // If we switch scanning off, ensure Quagga stops
+      try {
+        Quagga.stop();
+      } catch {}
+      return;
     }
 
-    return () => {
-      stopScanning();
+    if (!videoRef.current) return;
+
+    setIsInitializing(true);
+
+   // Quagga expects objects, not plain strings — convert them:
+   const readers = supportQR
+   ? ["ean_reader", "ean_8_reader", "code_128_reader", "upc_reader", "qr_reader"]
+   : ["ean_reader", "ean_8_reader", "code_128_reader", "upc_reader"];
+ 
+ // Quagga requires a `config` object for each format
+ const readerConfigs = readers.map((format) => ({
+   format,
+   config: {}, // required — even if empty
+ }));
+
+
+    const handleDetected = (result: any) => {
+      const code = result?.codeResult?.code;
+      if (!code) return;
+
+      console.log("Detected (Quagga):", code);
+
+      // Stop scanning after the first valid read
+      setIsScanning(false);
+      handleBarcode(code);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nativeSupported]);
+
+    Quagga.init(
+      {
+        inputStream: {
+          type: "LiveStream",
+          target: videoRef.current,
+          constraints: { facingMode: "environment" },
+        },
+        decoder: { readers: readerConfigs },
+
+      },
+      (err) => {
+        setIsInitializing(false);
+        if (err) {
+          console.error("Quagga init error:", err);
+          setIsScanning(false);
+          return;
+        }
+        Quagga.start();
+        Quagga.onDetected(handleDetected);
+      }
+    );
+
+    return () => {
+      try {
+        Quagga.stop();
+      } catch {}
+      // @ts-ignore: offDetected isn't always typed
+      try {
+        Quagga.offDetected?.(handleDetected);
+      } catch {}
+    };
+  }, [isScanning, supportQR]);
+
+  /* ----------------------------------------------
+     MANUAL INPUT HANDLER
+  ----------------------------------------------- */
+  function submitManual() {
+    const normalized = normalizeEAN13(manualInput);
+    if (!normalized || !isValidEAN13(normalized)) {
+      setScanned("Invalid manual barcode");
+      return;
+    }
+    handleBarcode(normalized);
+  }
 
   return (
-    <div className="flex flex-col items-center gap-4">
-      <div className="relative w-full max-w-sm aspect-video bg-muted rounded-lg overflow-hidden" ref={videoRef}>
-        {isLoading && (
-           <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-             <div className="bg-white px-4 py-2 rounded shadow text-center flex flex-col items-center gap-2">
-                <div className="animate-spin h-5 w-5 border-2 border-gray-400 border-t-transparent rounded-full"></div>
-                <div className="text-xs">Analyzing Barcode...</div>
-             </div>
-           </div>
+    <div className="w-full text-center space-y-4">
+      {/* SCAN WINDOW + OVERLAY */}
+      <div className="relative">
+        <div
+          ref={videoRef}
+          className="w-full h-[260px] bg-black/20 rounded-lg overflow-hidden"
+        />
+
+        {/* Overlay frame */}
+        <div className="absolute inset-0 pointer-events-none border-2 border-white/40 rounded-lg">
+          <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-primary rounded-tl" />
+          <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-primary rounded-tr" />
+          <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-primary rounded-bl" />
+          <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-primary rounded-br" />
+        </div>
+
+        {/* “Hold still…” state */}
+        {isSteady && (
+          <div className="absolute bottom-2 left-0 right-0 text-white text-sm animate-pulse">
+            Hold still… analyzing
+          </div>
         )}
-        {hasCameraPermission === false && (
-           <div className="absolute inset-0 flex items-center justify-center bg-muted">
-             <Alert variant="destructive" className="w-auto">
-                <AlertTitle>Camera Access Required</AlertTitle>
-                <AlertDescription>
-                    {error || "Please allow camera access to use the scanner."}
-                </AlertDescription>
-             </Alert>
-           </div>
+
+        {/* Status overlay when initializing */}
+        {isInitializing && isScanning && (
+          <div className="absolute inset-0 bg-black/40 flex items-center justify-center text-white text-xs">
+            Initializing camera…
+          </div>
         )}
-       </div>
+      </div>
+
+      {/* SCAN STATUS */}
+      {scanned && (
+        <div className="text-sm text-muted-foreground">
+          <strong>Scanned:</strong> {scanned}
+        </div>
+      )}
+
+      {/* START / STOP BUTTONS */}
+      <div className="flex items-center justify-center gap-3">
+        {!isScanning ? (
+          <button
+            onClick={() => setIsScanning(true)}
+            className="bg-primary text-white px-4 py-2 rounded-lg text-sm"
+          >
+            Start scanning
+          </button>
+        ) : (
+          <button
+            onClick={() => setIsScanning(false)}
+            className="bg-destructive text-white px-4 py-2 rounded-lg text-sm"
+          >
+            Stop scanning
+          </button>
+        )}
+      </div>
+
+      {/* QR TOGGLE */}
+      <label className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+        <input
+          type="checkbox"
+          checked={supportQR}
+          onChange={() => setSupportQR((v) => !v)}
+        />
+        Enable QR code scanning
+      </label>
+
+      {/* MANUAL INPUT */}
+      <div className="flex flex-col items-center gap-2 mt-4">
+        <input
+          type="text"
+          placeholder="Enter barcode manually"
+          value={manualInput}
+          onChange={(e) => setManualInput(e.target.value)}
+          className="border rounded px-3 py-2 w-48 text-center text-sm"
+        />
+        <button
+          onClick={submitManual}
+          className="bg-primary text-white px-4 py-2 rounded-lg text-sm"
+        >
+          Submit
+        </button>
+      </div>
     </div>
   );
 }

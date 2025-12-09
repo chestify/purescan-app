@@ -28,8 +28,12 @@ import type { Product, Ingredient } from "@/lib/data";
 
 import placeholderImages from "@/lib/placeholder-images.json";
 import { useEffect, useState } from "react";
-import { getProductByBarcode, getIngredientsByProductId, getIngredientById } from "@/lib/firestore-client";
 import { Skeleton } from "@/components/ui/skeleton";
+import { 
+  getProductByBarcode, 
+  getIngredientsByProductId, 
+  getIngredientById 
+} from "@/lib/firestore";
 
 // -----------------------------------------------
 // Optional fallback calculator (only if Firestore score missing)

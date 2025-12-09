@@ -4,10 +4,19 @@ import Image from 'next/image';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CheckCircle, Shield, Truck } from 'lucide-react';
 import placeholderImages from '@/lib/placeholder-images.json';
-import { useRouter } from "next/navigation";
 import dynamic from 'next/dynamic';
 import { Skeleton } from '@/components/ui/skeleton';
 
+// ⭐ The ONLY valid BarcodeScanner (dynamic, client-only)
+const BarcodeScanner = dynamic(() => import('@/components/BarcodeScanner'), { 
+  ssr: false,
+  loading: () => (
+    <div className="flex flex-col items-center gap-4">
+      <Skeleton className="w-full max-w-sm aspect-video rounded-lg" />
+      <Skeleton className="h-4 w-32" />
+    </div>
+  )
+});
 
 const features = [
   {
@@ -25,26 +34,9 @@ const features = [
     title: 'Certified Clean Choices',
     description: 'Look for the PureScan seal to easily identify products verified by our clean standards.',
   },
-]
-
-const BarcodeScanner = dynamic(() => import('@/components/BarcodeScanner'), { 
-  ssr: false,
-  loading: () => (
-    <div className="flex flex-col items-center gap-4">
-      <Skeleton className="w-full max-w-sm aspect-video rounded-lg" />
-      <Skeleton className="h-4 w-32" />
-    </div>
-  )
-});
-
+];
 
 export default function Home() {
-  const router = useRouter();
-
-  function handleDetected(barcode: string) {
-    console.log("Detected barcode, redirecting:", barcode);
-    router.push(`/product/${barcode}`);
-  }
   const heroImage = placeholderImages.placeholderImages.find(p => p.id === "hero-image");
 
   return (
@@ -52,6 +44,8 @@ export default function Home() {
       <section className="w-full py-12 md:py-24 lg:py-32 xl:py-48 bg-card">
         <div className="container px-4 md:px-6">
           <div className="grid gap-6 lg:grid-cols-[1fr_400px] lg:gap-12 xl:grid-cols-[1fr_600px]">
+
+            {/* LEFT COLUMN */}
             <div className="flex flex-col justify-center space-y-4">
               <div className="space-y-2">
                 <h1 className="text-3xl font-bold tracking-tighter sm:text-5xl xl:text-6xl/none font-headline">
@@ -61,17 +55,21 @@ export default function Home() {
                   PureScan helps you understand product ingredients, so you can make safer choices for you and your family.
                 </p>
               </div>
+
+              {/* ⭐ Scanner Section */}
               <section className="mt-6">
                 <h2 className="text-2xl font-bold mb-4">Scan a Product</h2>
 
-                <BarcodeScanner onDetected={handleDetected} />
+                {/* The new scanner — no props needed */}
+                <BarcodeScanner />
 
                 <p className="text-center mt-2 text-sm text-muted-foreground">
-                    Point your camera at a barcode to begin.
+                  Point your camera at a barcode to begin.
                 </p>
               </section>
-
             </div>
+
+            {/* RIGHT COLUMN (Hero Image) */}
             <div className="mx-auto aspect-[3/2] overflow-hidden rounded-xl lg:order-last">
               <Image
                 src={heroImage?.imageUrl ?? "https://picsum.photos/seed/purescan-hero/600/400"}
@@ -85,7 +83,8 @@ export default function Home() {
           </div>
         </div>
       </section>
-      
+
+      {/* FEATURES SECTION */}
       <section className="w-full py-12 md:py-24 lg:py-32">
         <div className="container px-4 md:px-6">
           <div className="flex flex-col items-center justify-center space-y-4 text-center">
@@ -97,6 +96,7 @@ export default function Home() {
               </p>
             </div>
           </div>
+
           <div className="mx-auto grid max-w-5xl items-start gap-8 sm:grid-cols-2 md:gap-12 lg:grid-cols-3 mt-12">
             {features.map((feature, index) => (
               <Card key={index} className="bg-background">
