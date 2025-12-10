@@ -3,11 +3,12 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import Quagga from "@ericblade/quagga2";
 import { useRouter } from "next/navigation";
-import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Video } from "lucide-react";
 
+/* Allow BarcodeDetector on window if ever needed */
 declare global {
   interface Window {
     BarcodeDetector: any;
@@ -22,8 +23,8 @@ const LOOKUP_URL =
 ------------------------------------------------------------- */
 function normalizeEAN13(raw: string): string | null {
   if (!raw) return null;
-  let digits = raw.replace(/\D/g, "");
 
+  const digits = raw.replace(/\D/g, "");
   if (digits.length === 12) {
     const sum = digits
       .split("")
@@ -32,29 +33,27 @@ function normalizeEAN13(raw: string): string | null {
         0
       );
     const checksum = (10 - (sum % 10)) % 10;
-    digits += checksum;
+    return digits + checksum;
   }
 
-  if (digits.length > 13) digits = digits.slice(0, 13);
-  return digits.length === 13 ? digits : null;
+  if (digits.length === 13) return digits;
+  return null;
 }
 
-function isValidEAN13(code: string | null): boolean {
+function isValidEAN13(code: string | null) {
   if (!code || !/^\d{13}$/.test(code)) return false;
 
   const digits = code.split("").map(Number);
-  const checksum = digits.pop()!;
+  const check = digits.pop()!;
   const sum = digits.reduce(
-    (acc, val, idx) => acc + val * (idx % 2 === 0 ? 1 : 3),
+    (acc, v, i) => acc + v * (i % 2 === 0 ? 1 : 3),
     0
   );
-  const expected = (10 - (sum % 10)) % 10;
-
-  return checksum === expected;
+  return check === (10 - (sum % 10)) % 10;
 }
 
 /* -------------------------------------------------------------
-   MAIN SCANNER COMPONENT
+   MAIN COMPONENT
 ------------------------------------------------------------- */
 export default function BarcodeScanner({
   onDetected,
@@ -67,30 +66,41 @@ export default function BarcodeScanner({
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const [scanned, setScanned] = useState<string | null>(null);
-  const [isSteady, setIsSteady] = useState(false);
   const [manualInput, setManualInput] = useState("");
   const [supportQR, setSupportQR] = useState(false);
+
   const [isScanning, setIsScanning] = useState(false);
   const [isInitializing, setIsInitializing] = useState(false);
+  const [isSteady, setIsSteady] = useState(false);
   const [hasCameraPermission, setHasCameraPermission] = useState(true);
 
+  // keep last scans across renders for stability filter
+  const lastScansRef = useRef<string[]>([]);
+
+  function verifyStableScan(code: string) {
+    const arr = lastScansRef.current;
+    arr.push(code);
+    if (arr.length > 6) arr.shift();
+    const count = arr.filter((c) => c === code).length;
+    return count >= 3; // require 3 matching reads
+  }
+
   /* -------------------------------------------------------------
-     BARCODE LOOKUP VIA CLOUD FUNCTION
+     Handle barcode result
   ------------------------------------------------------------- */
   const handleBarcode = useCallback(
     async (raw: string) => {
-      if (isSteady) return;
+      if (isSteady) return; // ignore repeated triggers while processing
 
       const normalized = normalizeEAN13(raw);
-      console.log("Raw scan:", raw, "→ Normalized:", normalized);
-
-      setScanned(normalized ?? "Invalid scan");
+      console.log("📦 Raw scan:", raw, "➡ Normalized:", normalized);
 
       if (!normalized || !isValidEAN13(normalized)) {
-        console.warn("Invalid barcode, ignoring.");
+        console.warn("❌ Invalid or partial barcode ignored:", raw);
         return;
       }
 
+      setScanned(normalized);
       setIsSteady(true);
       setIsScanning(false);
 
@@ -98,36 +108,34 @@ export default function BarcodeScanner({
         const res = await fetch(
           `${LOOKUP_URL}?barcode=${encodeURIComponent(normalized)}`
         );
-
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
         const data = await res.json();
-        if (data.error) throw new Error(data.error);
 
-        onDetected?.(normalized);
         router.push(`/product/${data.id}?status=${data.status}`);
+        onDetected?.(normalized);
       } catch (e: any) {
-        console.error("Lookup failed:", e);
+        console.error("Lookup error:", e);
         toast({
           title: "Lookup Error",
           description:
-            e.message || "Unable to look up this product. Please try again.",
+            e.message || "Could not look up this product. Please try again.",
           variant: "destructive",
         });
         setIsSteady(false);
       }
     },
-    [isSteady, onDetected, router, toast]
+    [isSteady, router, onDetected, toast]
   );
 
   /* -------------------------------------------------------------
-     STOP CAMERA
+     Stop camera safely
   ------------------------------------------------------------- */
   const stopCamera = useCallback(() => {
-    console.log("Stopping camera + Quagga");
+    console.log("📷 Stopping camera...");
     if (videoRef.current?.srcObject) {
       const stream = videoRef.current.srcObject as MediaStream;
-      stream.getTracks().forEach((track) => track.stop());
+      stream.getTracks().forEach((t) => t.stop());
       videoRef.current.srcObject = null;
     }
     try {
@@ -136,7 +144,7 @@ export default function BarcodeScanner({
   }, []);
 
   /* -------------------------------------------------------------
-     START CAMERA + QUAGGA SCANNER
+     Start scanner
   ------------------------------------------------------------- */
   useEffect(() => {
     if (!isScanning) {
@@ -149,84 +157,54 @@ export default function BarcodeScanner({
 
       setIsInitializing(true);
       setHasCameraPermission(true);
+      lastScansRef.current = [];
+      setIsSteady(false);
 
       try {
-        console.log("Requesting camera with higher constraints…");
-
+        // High-resolution, rear camera
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
-            facingMode: { ideal: "environment" },
+            facingMode: "environment",
             width: { ideal: 1920 },
             height: { ideal: 1080 },
           },
         });
 
-        const videoElement = videoRef.current as HTMLVideoElement;
-        videoElement.srcObject = stream;
-        videoElement.setAttribute("playsinline", "true");
-        videoElement.setAttribute("webkit-playsinline", "true");
+        videoRef.current.srcObject = stream;
 
-        await videoElement.play().catch((err) => {
-          console.warn("Video playback failed:", err);
-        });
-
-        // Try to improve focus/zoom on Android if supported
-        const [track] = stream.getVideoTracks();
-        if (track) {
-          try {
-            // These advanced constraints are best-effort; unsupported keys are ignored
-            await (track as any).applyConstraints({
-              advanced: [
-                { focusMode: "continuous" },
-                { zoom: 2 },
-              ],
-            });
-            console.log("Applied advanced camera constraints (focus/zoom).");
-          } catch (e) {
-            console.log("Advanced constraints not supported:", e);
-          }
-        }
-
-        // Quagga readers config – object format required by typings
-        const readerConfigs =
-          supportQR
-            ? [
-                { format: "ean_reader", config: {} },
-                { format: "ean_8_reader", config: {} },
-                { format: "code_128_reader", config: {} },
-                { format: "upc_reader", config: {} },
-                { format: "qr_reader", config: {} },
-              ]
-            : [
-                { format: "ean_reader", config: {} },
-                { format: "ean_8_reader", config: {} },
-                { format: "code_128_reader", config: {} },
-                { format: "upc_reader", config: {} },
-              ];
-
-        const onDetectedLocal = (result: any) => {
-          console.log("Detection attempt:", result);
-          const code = result?.codeResult?.code;
-          if (code) {
-            console.log("Detected (Quagga):", code);
-            handleBarcode(code);
-          }
+        // Scan zone: full-width, narrow horizontal band
+        const scanArea = {
+          top: "40%",
+          right: "10%",
+          left: "10%",
+          bottom: "40%",
         };
 
-        console.log("Initializing Quagga with readers:", readerConfigs);
+        const readers = supportQR
+          ? ["ean_reader", "ean_8_reader", "code_128_reader", "upc_reader", "qr_reader"]
+          : ["ean_reader", "ean_8_reader", "code_128_reader", "upc_reader"];
 
         Quagga.init(
           {
             inputStream: {
               type: "LiveStream",
               target: videoRef.current,
-              constraints: { facingMode: "environment" },
+              constraints: {
+                facingMode: "environment",
+              },
+            },
+            locator: {
+              patchSize: "medium",
+              halfSample: false,
             },
             decoder: {
-              readers: readerConfigs,
+              // Cast to any to satisfy Quagga's strict typings
+              readers: readers as any,
             },
-            locator: { patchSize: "medium", halfSample: true },
             locate: true,
+            area: scanArea as any,
+            numOfWorkers: 4,
+            frequency: 10,
           },
           (err) => {
             setIsInitializing(false);
@@ -234,30 +212,28 @@ export default function BarcodeScanner({
             if (err) {
               console.error("Quagga init error:", err);
               setHasCameraPermission(false);
-              toast({
-                title: "Camera Error",
-                description: "Failed to initialize camera.",
-                variant: "destructive",
-              });
               setIsScanning(false);
               return;
             }
 
-            console.log("Quagga started.");
             Quagga.start();
-            Quagga.onDetected(onDetectedLocal);
+
+            Quagga.onDetected((result) => {
+              const code = result?.codeResult?.code;
+              if (!code || code.length < 10) return; // reject obvious garbage
+
+              if (!verifyStableScan(code)) return; // wait until stable
+
+              console.log("📸 Stable detection:", code);
+              handleBarcode(code);
+            });
           }
         );
       } catch (error) {
-        console.error("Error accessing camera:", error);
+        console.error("Camera error:", error);
         setHasCameraPermission(false);
         setIsInitializing(false);
         setIsScanning(false);
-        toast({
-          title: "Camera Access Denied",
-          description: "Please enable camera permissions.",
-          variant: "destructive",
-        });
       }
     };
 
@@ -266,100 +242,90 @@ export default function BarcodeScanner({
     return () => {
       stopCamera();
       try {
-        // @ts-ignore
+        // @ts-ignore – offDetected isn't always present in typings
         Quagga.offDetected?.();
       } catch {}
     };
-  }, [isScanning, supportQR, handleBarcode, stopCamera, toast]);
+  }, [isScanning, supportQR, handleBarcode, stopCamera]);
 
   /* -------------------------------------------------------------
-     MANUAL INPUT
+     Manual input fallback
   ------------------------------------------------------------- */
   function submitManual() {
-    if (!manualInput) return;
-
     const normalized = normalizeEAN13(manualInput);
     if (!normalized || !isValidEAN13(normalized)) {
       toast({
         title: "Invalid Barcode",
-        description: "Please enter a valid EAN-13 code.",
+        description: "Please enter a valid EAN-13 barcode.",
         variant: "destructive",
       });
       return;
     }
-
     handleBarcode(normalized);
   }
 
   /* -------------------------------------------------------------
-     RENDER
+     RENDER UI
   ------------------------------------------------------------- */
   return (
     <div className="w-full text-center space-y-4">
-      {/* SCAN WINDOW */}
       <div className="relative w-full max-w-sm mx-auto">
+        {/* Camera preview */}
         <video
           ref={videoRef}
-          className="w-full aspect-video rounded-md bg-black/20"
+          className="w-full aspect-video rounded-md bg-black/10"
           autoPlay
           muted
           playsInline
         />
 
-        {/* Overlay frame */}
-        <div className="absolute inset-0 pointer-events-none border-2 border-white/40 rounded-lg">
-          <div className="absolute top-2 left-2 w-8 h-8 border-t-4 border-l-4 border-primary rounded-tl-md" />
-          <div className="absolute top-2 right-2 w-8 h-8 border-t-4 border-r-4 border-primary rounded-tr-md" />
-          <div className="absolute bottom-2 left-2 w-8 h-8 border-b-4 border-l-4 border-primary rounded-bl-md" />
-          <div className="absolute bottom-2 right-2 w-8 h-8 border-b-4 border-r-4 border-primary rounded-br-md" />
+        {/* Scan zone overlay: full width, narrow height */}
+        <div className="absolute inset-0 pointer-events-none">
+          <div
+            className="absolute left-0 right-0 border-t-4 border-primary opacity-70"
+            style={{ top: "40%" }}
+          />
+          <div
+            className="absolute left-0 right-0 border-b-4 border-primary opacity-70"
+            style={{ bottom: "40%" }}
+          />
         </div>
 
         {isSteady && (
-          <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white animate-pulse">
+          <div className="absolute inset-0 bg-black/50 text-white flex items-center justify-center animate-pulse">
             Analyzing…
           </div>
         )}
 
-        {isInitializing && isScanning && (
-          <div className="absolute inset-0 bg-black/40 flex items-center justify-center text-white text-xs">
-            Initializing camera…
-          </div>
-        )}
-
         {!hasCameraPermission && (
-          <div className="absolute inset-0 bg-black/80 flex items-center justify-center rounded-md p-4">
+          <div className="absolute inset-0 bg-black/80 flex items-center justify-center rounded-md">
             <Alert variant="destructive">
               <Video className="h-4 w-4" />
               <AlertTitle>Camera Access Required</AlertTitle>
               <AlertDescription>
-                Please allow camera access to use this feature.
+                Please enable camera permissions to use the scanner.
               </AlertDescription>
             </Alert>
           </div>
         )}
       </div>
 
-      {/* LAST SCAN STATUS */}
       {scanned && (
-        <div className="text-sm text-muted-foreground h-5">
-          <strong>Last Scan:</strong> {scanned}
-        </div>
+        <p className="text-sm text-muted-foreground h-5">
+          Last scan: {scanned}
+        </p>
       )}
 
-      {/* START / STOP BUTTON */}
-      <div className="flex items-center justify-center gap-3">
-        <Button
-          onClick={() => {
-            setIsSteady(false);
-            setIsScanning((s) => !s);
-          }}
-          disabled={isInitializing}
-        >
-          {isScanning ? "Stop Scanning" : "Start Scanning"}
-        </Button>
-      </div>
+      <Button
+        disabled={isInitializing}
+        onClick={() => {
+          setIsSteady(false);
+          setIsScanning((v) => !v);
+        }}
+      >
+        {isScanning ? "Stop Scanning" : "Start Scanning"}
+      </Button>
 
-      {/* QR TOGGLE */}
       <label className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
         <input
           type="checkbox"
@@ -367,24 +333,22 @@ export default function BarcodeScanner({
           onChange={() => setSupportQR((v) => !v)}
           disabled={isScanning}
         />
-        Enable QR code scanning
+        Enable QR scanning
       </label>
 
-      {/* MANUAL INPUT */}
-      <div className="flex flex-col items-center gap-2 pt-4 border-t">
-        <p className="text-sm text-muted-foreground">Or enter barcode manually:</p>
+      <div className="pt-4 border-t flex flex-col items-center gap-2">
+        <p className="text-sm text-muted-foreground">Or enter manually:</p>
         <div className="flex gap-2">
           <input
             type="tel"
-            placeholder="Enter 12 or 13 digits"
+            className="border rounded px-3 py-2 w-48 text-center text-sm"
+            placeholder="Enter barcode"
             value={manualInput}
             onChange={(e) =>
               setManualInput(e.target.value.replace(/\D/g, ""))
             }
-            className="border rounded px-3 py-2 w-48 text-center text-sm"
-            onKeyDown={(e) => e.key === "Enter" && submitManual()}
           />
-          <Button onClick={submitManual} variant="secondary">
+          <Button variant="secondary" onClick={submitManual}>
             Submit
           </Button>
         </div>
