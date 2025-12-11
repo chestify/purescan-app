@@ -9,6 +9,7 @@
 !.yarn/plugins
 !.yarn/releases
 !.yarn/versions
+src/lib/firebase.ts
 
 # testing
 /coverage
